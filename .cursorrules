@@ -1,0 +1,69 @@
+# GitHub Agent — AI 助手指令
+
+## 项目概述
+
+GitHub Agent 是一个 Next.js 16 应用，通过 LangChain.js 调用 DeepSeek API（deepseek-reasoner 模型），封装 gh CLI 为工具，让用户通过自然语言管理 GitHub 仓库、PR、Issue。
+
+## 技术栈
+
+- **框架**: Next.js 16.2.6 (App Router + Turbopack)
+- **React**: 19.2.4
+- **UI**: shadcn (base-ui react) + Tailwind CSS 4
+- **AI**: LangChain.js (`@langchain/core`, `@langchain/openai`, `@langchain/langgraph`)
+- **模型**: DeepSeek deepseek-reasoner（通过 OpenAI 兼容接口）
+- **工具**: GitHub CLI (gh)
+- **TypeScript**: 严格模式
+
+## 项目结构
+
+```
+src/
+  app/
+    api/
+      chat/route.ts          # Agent 对话 API（model.bindTools + 流式输出）
+      chat/confirm/route.ts  # 工具确认 API（执行工具 + 模型分析结果）
+      github/                # REST API（repos, prs, issues, search）
+    layout.tsx               # 根布局 + ThemeProvider
+    page.tsx                 # 首页（概览 + 搜索）
+    repos/, prs/, issues/    # 各功能页面
+    insights/, settings/     # 洞察 + 设置
+  components/
+    chat/chat-panel.tsx      # Agent 对话面板（核心交互）
+    layout/
+      app-shell.tsx          # 应用外壳（Sidebar + ChatPanel）
+      sidebar.tsx            # 侧边栏导航
+      theme-provider.tsx     # 主题管理
+      theme-toggle.tsx       # 主题切换按钮
+    ui/                      # shadcn 组件
+  lib/
+    langchain-model.ts       # ChatOpenAI 实例（DeepSeek）
+    tools/github-tools.ts    # 9 个 LangChain 工具
+    message-history.ts       # 内存会话管理 + system prompt
+    github.ts                # gh CLI 封装
+    utils.ts                 # cn() 等工具函数
+```
+
+## Agent 执行流程
+
+```
+用户输入 → model.bindTools().stream() → 流式输出 (content + reasoning)
+  → 检测到 tool_call → 前端显示确认
+  → 用户确认 → confirm API 执行工具 → model.bindTools().stream() 分析结果
+  → 流式回复 → 完成
+```
+
+## 编码规范
+
+- **主题切换**: 使用 `data-theme` 属性（不用 `dark` class，避免 Next.js hydration 冲突）
+- **组件风格**: 优先用 shadcn 组件 + Tailwind CSS，避免原生 HTML 元素
+- **CSS**: 全局变量定义在 `globals.css`，使用 `oklch` 色彩空间
+- **API 路由**: 统一使用 SSE 流式响应，`data: [DONE]` 标记结束
+- **错误处理**: API 返回 500 + JSON `{ error: message }`
+- **中文回复**: 所有面向用户的文本用中文
+
+## 常见模式
+
+- 流式更新用 `ReadableStream` + `TextEncoder`
+- 节流渲染用 `performance.now()` + 32ms 间隔
+- 智能滚动：仅在用户靠近底部时自动滚动
+- 消息队列：loading 时将请求推入 queueRef
