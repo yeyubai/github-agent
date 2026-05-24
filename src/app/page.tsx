@@ -1,65 +1,257 @@
-import Image from "next/image";
+"use client";
+
+import { AppShell } from "@/components/layout/app-shell";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { LoadingOverlay, ErrorState, EmptyState } from "@/components/ui/feedback";
+import { LanguageSelect } from "@/components/ui/language-select";
+import { GitBranch, GitPullRequest, CircleDot, Search, Loader2, Star, GitFork, ExternalLink, Languages } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+interface Stats {
+  repos: number;
+  prs: number;
+  issues: number;
+}
+
+interface RepoResult {
+  fullName: string;
+  description: string | null;
+  stargazerCount: number;
+  forksCount: number;
+  primaryLanguage: { name: string } | null;
+  updatedAt: string;
+  url: string;
+}
 
 export default function Home() {
+  const router = useRouter();
+  const [stats, setStats] = useState<Stats>({ repos: 0, prs: 0, issues: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // 搜索状态
+  const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [language, setLanguage] = useState("");
+  const [results, setResults] = useState<RepoResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/github/repos").then((r) => r.json()),
+      fetch("/api/github/prs").then((r) => r.json()),
+      fetch("/api/github/issues").then((r) => r.json()),
+    ])
+      .then(([repos, prs, issues]) => {
+        setStats({
+          repos: repos.length || 0,
+          prs: prs.length || 0,
+          issues: issues.length || 0,
+        });
+      })
+      .catch(() => setError("请确保已安装 gh CLI 并登录"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSearch = async () => {
+    if (!searchInput.trim()) return;
+
+    setSearching(true);
+    setSearchError("");
+    setResults([]);
+
+    const params = new URLSearchParams({ q: searchInput.trim() });
+    if (language) params.set("lang", language);
+
+    try {
+      const res = await fetch(`/api/github/repos/search?${params}`);
+      const data = await res.json();
+
+      if (data.error) {
+        setSearchError(data.error);
+      } else {
+        setResults(data);
+        setQuery(searchInput.trim());
+      }
+    } catch {
+      setSearchError("搜索失败，请检查 gh CLI 状态");
+    } finally {
+      setSearching(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <AppShell>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">概览</h1>
+
+        {error ? (
+          <ErrorState
+            message={error}
+            action={{ label: "重试", onClick: () => window.location.reload() }}
+          />
+        ) : loading ? (
+          <LoadingOverlay text="正在获取 GitHub 数据..." />
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">仓库</CardTitle>
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.repos}</div>
+                <p className="text-xs text-muted-foreground">我的仓库总数</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Pull Requests</CardTitle>
+                <GitPullRequest className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.prs}</div>
+                <p className="text-xs text-muted-foreground">开放的 PR</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Issues</CardTitle>
+                <CircleDot className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.issues}</div>
+                <p className="text-xs text-muted-foreground">开放的 Issue</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* 项目搜索 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              搜索项目
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="搜索关键词，如 react、machine learning、nextjs..."
+                className="flex-1"
+                disabled={searching}
+              />
+              <LanguageSelect
+                value={language}
+                onChange={setLanguage}
+                disabled={searching}
+              />
+              <Button onClick={handleSearch} disabled={searching || !searchInput.trim()}>
+                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : "搜索"}
+              </Button>
+            </div>
+
+            {searchError && (
+              <ErrorState message={searchError} />
+            )}
+
+            {results.length > 0 && (
+              <div className="text-sm text-muted-foreground">
+                找到 {results.length} 个项目，关键词：{query}
+                {language ? `，语言：${language}` : ""}
+              </div>
+            )}
+
+            {results.length > 0 && (
+              <div className="space-y-2">
+                {results.map((repo) => (
+                  <a
+                    key={repo.fullName}
+                    href={repo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm truncate">
+                            {repo.fullName}
+                          </span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+                        </div>
+                        {repo.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                            {repo.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      {repo.primaryLanguage && (
+                        <span className="flex items-center gap-1">
+                          <Languages className="h-3 w-3" />
+                          {repo.primaryLanguage.name}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3" />
+                        {repo.stargazerCount.toLocaleString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <GitFork className="h-3 w-3" />
+                        {repo.forksCount.toLocaleString()}
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>快速操作</CardTitle>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-accent"
+              onClick={() => {
+                setSearchInput("");
+                document.querySelector<HTMLInputElement>('input[placeholder*="搜索关键词"]')?.focus();
+              }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              搜索项目
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-accent"
+              onClick={() => router.push("/repos")}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              查看仓库列表
+            </Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+              检查我的 PR
+            </Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+              浏览开放 Issue
+            </Badge>
+          </CardContent>
+        </Card>
+      </div>
+    </AppShell>
   );
 }
