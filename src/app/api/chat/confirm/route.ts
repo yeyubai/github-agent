@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const toolResult = await (tool as any).invoke(toolArgs);
+    const toolResult = await (tool as unknown as { invoke: (args: Record<string, unknown>) => Promise<string> }).invoke(toolArgs);
 
     // FIX: Use ToolMessage instead of HumanMessage for tool results
     const resultMsg = new ToolMessage({
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           const found = await streamModelResponse(
-            state.messages as any,
+            state.messages as unknown[],
             (data) => {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify(data)}\n\n`)

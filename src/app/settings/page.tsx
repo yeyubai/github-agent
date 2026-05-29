@@ -72,7 +72,7 @@ export default function SettingsPage() {
   const previewPrompt = buildSystemPrompt({ role, toolDescription: toolDesc, workflow, replyStyle });
 
   // ==================== GitHub Token 配置 ====================
-  const { clientId, resetClientId, isLoaded } = useGitHubToken();
+  const { isLoaded } = useGitHubToken();
   const [tokenInput, setTokenInput] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [savingToken, setSavingToken] = useState(false);

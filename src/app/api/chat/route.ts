@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           const found = await streamModelResponse(
-            state.messages as any,
+            state.messages as unknown[],
             (data) => {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
