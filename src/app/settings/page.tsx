@@ -72,23 +72,24 @@ export default function SettingsPage() {
   const previewPrompt = buildSystemPrompt({ role, toolDescription: toolDesc, workflow, replyStyle });
 
   // ==================== GitHub Token 配置 ====================
-  const { token: savedToken, setToken: setSavedToken, removeToken, isLoaded } = useGitHubToken();
+  const { clientId, resetClientId, isLoaded } = useGitHubToken();
   const [tokenInput, setTokenInput] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [savingToken, setSavingToken] = useState(false);
   const [verifyingToken, setVerifyingToken] = useState(false);
   const [tokenStatus, setTokenStatus] = useState<"saved" | "verified" | "error" | null>(null);
+  const [hasToken, setHasToken] = useState(false);
 
-  // 加载时回显 token（只显示前8位）
+  // Check if token exists on load
   useEffect(() => {
-    if (savedToken) {
-      setTokenInput(savedToken.slice(0, 8) + "..." + savedToken.slice(-4));
-    }
-  }, [savedToken]);
+    fetch("/api/github/token")
+      .then((r) => r.json())
+      .then((data) => setHasToken(data.hasToken ?? false))
+      .catch(() => setHasToken(false));
+  }, []);
 
   const handleSaveToken = async () => {
-    const rawToken = tokenInput.includes("...") ? savedToken : tokenInput;
-    if (!rawToken?.trim() || rawToken.includes("...")) return;
+    if (!tokenInput.trim() || tokenInput.includes("...")) return;
 
     setSavingToken(true);
     setTokenStatus(null);
@@ -97,12 +98,12 @@ export default function SettingsPage() {
       const res = await fetch("/api/github/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: rawToken.trim() }),
+        body: JSON.stringify({ token: tokenInput.trim() }),
       });
 
       if (res.ok) {
-        setSavedToken(rawToken.trim());
-        setTokenInput(rawToken.trim().slice(0, 8) + "..." + rawToken.trim().slice(-4));
+        setHasToken(true);
+        setTokenInput(tokenInput.trim().slice(0, 8) + "..." + tokenInput.trim().slice(-4));
         setTokenStatus("saved");
       } else {
         const data = await res.json();
@@ -116,19 +117,21 @@ export default function SettingsPage() {
   };
 
   const handleVerifyToken = async () => {
-    const rawToken = tokenInput.includes("...") ? savedToken : tokenInput;
-    if (!rawToken?.trim()) return;
+    const rawToken = tokenInput.includes("...") ? null : tokenInput.trim();
+    if (!rawToken && !hasToken) return;
 
     setVerifyingToken(true);
     setTokenStatus(null);
 
     try {
-      // 先保存 token
-      await fetch("/api/github/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: rawToken.trim() }),
-      });
+      // If user has a new token, save it first
+      if (rawToken && !rawToken.includes("...")) {
+        await fetch("/api/github/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: rawToken }),
+        });
+      }
 
       // 验证：调用一个轻量级 API
       const res = await fetch("/api/github/repos?limit=1");
@@ -146,7 +149,7 @@ export default function SettingsPage() {
 
   const handleRemoveToken = async () => {
     await fetch("/api/github/token", { method: "DELETE" });
-    removeToken();
+    setHasToken(false);
     setTokenInput("");
     setTokenStatus(null);
   };
@@ -333,7 +336,7 @@ export default function SettingsPage() {
                 {verifyingToken ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Globe className="h-4 w-4 mr-1" />}
                 验证
               </Button>
-              {savedToken && (
+              {hasToken && (
                 <Button variant="destructive" onClick={handleRemoveToken} size="icon">
                   <RotateCcw className="h-4 w-4" />
                 </Button>

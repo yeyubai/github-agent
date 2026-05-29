@@ -2,32 +2,31 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const TOKEN_KEY = "github-agent-token";
+const CLIENT_ID_KEY = "github-agent-client-id";
+
+function generateClientId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
 export function useGitHubToken() {
-  const [token, setTokenState] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [clientId, setClientId] = useState<string>("");
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(TOKEN_KEY);
-      setTokenState(stored);
-    } catch {
-      // ignore
-    } finally {
-      setIsLoaded(true);
+    let cid = localStorage.getItem(CLIENT_ID_KEY);
+    if (!cid) {
+      cid = generateClientId();
+      localStorage.setItem(CLIENT_ID_KEY, cid);
     }
+    setClientId(cid);
+    setIsLoaded(true);
   }, []);
 
-  const setToken = useCallback((value: string) => {
-    localStorage.setItem(TOKEN_KEY, value);
-    setTokenState(value);
+  const resetClientId = useCallback(() => {
+    const newCid = generateClientId();
+    localStorage.setItem(CLIENT_ID_KEY, newCid);
+    setClientId(newCid);
   }, []);
 
-  const removeToken = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    setTokenState(null);
-  }, []);
-
-  return { token, setToken, removeToken, isLoaded };
+  return { clientId, resetClientId, isLoaded };
 }
