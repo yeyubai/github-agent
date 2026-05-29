@@ -263,8 +263,22 @@ export default function SettingsPage() {
             <CardDescription>配置 DeepSeek API Key</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">DeepSeek API Key</label>
+              <Input
+                type="password"
+                value={deepseekKey}
+                onChange={(e) => {
+                  setDeepseekKey(e.target.value);
+                  setTestResult(null);
+                }}
+                placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                disabled={testing}
+              />
+            </div>
+
             <div className="flex items-center gap-2">
-              <Button onClick={handleTestKey} disabled={testing}>
+              <Button onClick={handleTestKey} disabled={testing || !deepseekKey.trim()}>
                 {testing ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
@@ -284,7 +298,10 @@ export default function SettingsPage() {
                 提示
               </p>
               <p>
-                API Key 存储在服务器的 <code className="bg-background px-1 rounded">.env.local</code> 文件中。
+                API Key 也可以通过服务器的 <code className="bg-background px-1 rounded">.env.local</code> 文件设置 <code className="bg-background px-1 rounded">DEEPSEEK_API_KEY</code> 环境变量。
+              </p>
+              <p>
+                获取地址：<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" className="underline">DeepSeek API Keys</a>
               </p>
             </div>
           </CardContent>
