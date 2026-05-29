@@ -130,16 +130,62 @@ export const searchCodeTool = tool(
   }
 );
 
+// Allowed gh command prefixes (read-safe + controlled write)
+const ALLOWED_GH_PREFIXES = [
+  "repo view",
+  "repo list",
+  "pr view",
+  "pr list",
+  "pr diff",
+  "pr checks",
+  "pr status",
+  "issue view",
+  "issue list",
+  "issue labels",
+  "search",
+  "api repos",
+  "api users",
+  "api orgs",
+  "api repos",
+  "api search",
+];
+
+const DANGEROUS_PATTERNS = ["repo delete", "repo rename", "auth", "alias set", "config set"];
+
+function isGhCommandAllowed(command: string): { allowed: boolean; reason?: string } {
+  const trimmed = command.trim();
+
+  // Block dangerous patterns
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (trimmed.startsWith(pattern)) {
+      return { allowed: false, reason: `命令 "${pattern}" 不在允许范围内` };
+    }
+  }
+
+  // Check allowlist
+  for (const prefix of ALLOWED_GH_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      return { allowed: true };
+    }
+  }
+
+  return { allowed: false, reason: `命令不在允许列表中。可用命令: ${ALLOWED_GH_PREFIXES.join(", ")}` };
+}
+
 export const runGhTool = tool(
   async ({ command }) => {
+    const check = isGhCommandAllowed(command);
+    if (!check.allowed) {
+      return `命令被拒绝: ${check.reason}`;
+    }
     const result = await runGhRaw(command);
     return result;
   },
   {
     name: "run_gh",
-    description: "执行任意 gh CLI 命令。当其他专用工具无法满足需求时使用。",
+    description: "执行 gh CLI 命令（仅限安全命令）。当其他专用工具无法满足需求时使用。",
     schema: z.object({
-      command: z.string().describe("完整的 gh 命令（不包含 gh 前缀），如 repo list --limit 10"),
+      command: z.string().describe("完整的 gh 命令（不包含 gh 前缀），如 repo view owner/repo"),
     }),
   }
 );
