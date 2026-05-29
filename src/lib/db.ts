@@ -174,3 +174,72 @@ export async function setUserConfig(userId: string, config: UserConfig): Promise
       { onConflict: "user_id" }
     );
 }
+
+// ===== Context operations =====
+
+export interface UserContext {
+  currentRepo: string | null;
+  currentPrNumber: number | null;
+  currentIssueNumber: number | null;
+  preferences: Record<string, unknown>;
+}
+
+export async function getUserContext(userId: string): Promise<UserContext> {
+  const { data } = await getSupabaseServer()
+    .from("user_context")
+    .select("current_repo, current_pr_number, current_issue_number, preferences")
+    .eq("user_id", userId)
+    .single();
+
+  if (!data) {
+    return { currentRepo: null, currentPrNumber: null, currentIssueNumber: null, preferences: {} };
+  }
+
+  return {
+    currentRepo: data.current_repo ?? null,
+    currentPrNumber: data.current_pr_number ?? null,
+    currentIssueNumber: data.current_issue_number ?? null,
+    preferences: (data.preferences as Record<string, unknown>) ?? {},
+  };
+}
+
+export async function setUserContext(userId: string, context: Partial<UserContext>): Promise<void> {
+  const existing = await getUserContext(userId);
+  const merged = { ...existing, ...context };
+
+  await getSupabaseServer()
+    .from("user_context")
+    .upsert(
+      {
+        user_id: userId,
+        current_repo: merged.currentRepo,
+        current_pr_number: merged.currentPrNumber,
+        current_issue_number: merged.currentIssueNumber,
+        preferences: merged.preferences,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+}
+
+export async function logActivity(userId: string, action: string, details?: Record<string, unknown>): Promise<void> {
+  await getSupabaseServer()
+    .from("activity_log")
+    .insert({
+      user_id: userId,
+      action,
+      details: details ?? {},
+    });
+}
+
+export async function getRecentActivity(userId: string, limit = 20): Promise<{ action: string; details: Record<string, unknown>; created_at: string }[]> {
+  const { data, error } = await getSupabaseServer()
+    .from("activity_log")
+    .select("action, details, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`Failed to load activity: ${error.message}`);
+  return (data || []) as { action: string; details: Record<string, unknown>; created_at: string }[];
+}
