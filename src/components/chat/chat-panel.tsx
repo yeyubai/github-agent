@@ -103,6 +103,17 @@ export function ChatPanel() {
     setSessionId(sid);
   }, []);
 
+  // Listen for action events from homepage
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      if (e.detail?.prompt) {
+        handleSend(e.detail.prompt);
+      }
+    };
+    window.addEventListener("chat-action", handler as EventListener);
+    return () => window.removeEventListener("chat-action", handler as EventListener);
+  }, []);
+
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
