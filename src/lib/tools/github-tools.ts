@@ -2,6 +2,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { runGhRaw, listRepos, listPRs, listIssues, searchRepos, searchCode } from "../github";
+import { allWriteTools } from "./write-tools";
 
 export const listReposTool = tool(
   async ({ limit }) => {
@@ -153,4 +154,5 @@ export const allTools = [
   viewIssueTool,
   searchCodeTool,
   runGhTool,
+  ...allWriteTools,
 ];

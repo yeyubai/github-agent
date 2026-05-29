@@ -476,3 +476,98 @@ export async function getRepoContributors(token: string | null, fullName: string
   const result = await ghCommand(`api repos/${fullName}/contributors --jq ".[:${limit}]"`);
   return JSON.parse(result) as { login: string; contributions: number; avatar_url: string; html_url: string }[];
 }
+
+// ==================== Write Operations ====================
+
+/** Create an Issue — REST API only (no gh CLI fallback needed) */
+export async function createIssue(token: string | null, repo: string, title: string, body?: string, labels?: string[]): Promise<{ number: number; url: string }> {
+  if (!hasToken(token)) throw new Error("GitHub token required for creating issues");
+  const [owner, name] = repo.split("/");
+  const payload: Record<string, unknown> = { title };
+  if (body) payload.body = body;
+  if (labels?.length) payload.labels = labels;
+
+  const res = await fetch(`${GITHUB_API}/repos/${owner}/${name}/issues`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { number: number; html_url: string };
+  return { number: data.number, url: data.html_url };
+}
+
+/** Comment on an Issue */
+export async function commentOnIssue(token: string | null, repo: string, issueNumber: number, body: string): Promise<{ url: string }> {
+  if (!hasToken(token)) throw new Error("GitHub token required for commenting");
+  const [owner, name] = repo.split("/");
+
+  const res = await fetch(`${GITHUB_API}/repos/${owner}/${name}/issues/${issueNumber}/comments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { html_url: string };
+  return { url: data.html_url };
+}
+
+/** Comment on a PR (same GitHub API endpoint as issue comments) */
+export async function commentOnPR(token: string | null, repo: string, prNumber: number, body: string): Promise<{ url: string }> {
+  return commentOnIssue(token, repo, prNumber, body);
+}
+
+/** Update Issue state/labels */
+export async function updateIssue(token: string | null, repo: string, issueNumber: number, state?: "open" | "closed", labels?: string[], assignees?: string[]): Promise<{ url: string }> {
+  if (!hasToken(token)) throw new Error("GitHub token required for updating issues");
+  const [owner, name] = repo.split("/");
+  const payload: Record<string, unknown> = {};
+  if (state) payload.state = state;
+  if (labels) payload.labels = labels;
+  if (assignees) payload.assignees = assignees;
+
+  const res = await fetch(`${GITHUB_API}/repos/${owner}/${name}/issues/${issueNumber}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { html_url: string };
+  return { url: data.html_url };
+}
+
+/** Merge a PR */
+export async function mergePR(token: string | null, repo: string, prNumber: number, mergeMethod: "merge" | "squash" | "rebase" = "merge"): Promise<{ sha: string }> {
+  if (!hasToken(token)) throw new Error("GitHub token required for merging PRs");
+  const [owner, name] = repo.split("/");
+
+  const res = await fetch(`${GITHUB_API}/repos/${owner}/${name}/pulls/${prNumber}/merge`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ merge_method: mergeMethod }),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { sha: string };
+  return { sha: data.sha };
+}
+
+/** Close a PR (same as update issue with state=closed) */
+export async function closePR(token: string | null, repo: string, prNumber: number): Promise<{ url: string }> {
+  return updateIssue(token, repo, prNumber, "closed");
+}
