@@ -127,6 +127,15 @@ export default function RepoDetailPage() {
   const params = useParams<{ slug: string[] }>();
   const [owner, repo] = params?.slug ?? ["", ""];
   const fullName = `${owner}/${repo}`;
+
+  useEffect(() => {
+    if (!fullName) return;
+    fetch("/api/chat/context", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentRepo: fullName }),
+    }).catch(() => {});
+  }, [fullName]);
   const defaultBranch = "main";
 
   const [activeTab, setActiveTab] = useState("overview");
