@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { PlanViewer } from "./plan-viewer";
 import { QuickActions } from "./quick-actions";
+import { PRCard, IssueCard, RepoCard, TodoItem, ActionCard } from "./rich-cards";
 import type { AgentPromptConfig } from "@/lib/prompt-config";
 import type { MultiStepPlanType } from "@/lib/planner";
 
@@ -34,6 +35,7 @@ interface Message {
   commandStatus?: "pending" | "executing" | "done" | "cancelled";
   plan?: MultiStepPlanType;
   planStatus?: "pending" | "approved" | "rejected";
+  cards?: { type: string; data: Record<string, unknown> }[];
 }
 
 function cn(...inputs: (string | false | null | undefined)[]) {
@@ -167,6 +169,7 @@ export function ChatPanel() {
     let assistantReasoning = "";
     let assistantToolCall: ToolCall | undefined;
     let assistantPlan: MultiStepPlanType | undefined;
+    let assistantCards: { type: string; data: Record<string, unknown> }[] = [];
     let lastUpdate = 0;
     const THROTTLE_MS = 32;
 
@@ -204,6 +207,10 @@ export function ChatPanel() {
             if (parsed.plan) {
               assistantPlan = parsed.plan;
             }
+            // 提取富卡片数据
+            if (parsed.card) {
+              assistantCards = [...assistantCards, parsed.card];
+            }
           } catch {
             assistantContent += data;
           }
@@ -225,6 +232,7 @@ export function ChatPanel() {
                   plan: assistantPlan,
                   planStatus: assistantPlan ? "pending" as const : undefined,
                   commandStatus: assistantToolCall ? "pending" as const : "done" as const,
+                  cards: assistantCards.length > 0 ? [...assistantCards] : m.cards,
                 }
               : m
           )
@@ -245,6 +253,7 @@ export function ChatPanel() {
               plan: assistantPlan,
               planStatus: assistantPlan ? "pending" as const : undefined,
               commandStatus: assistantToolCall ? "pending" as const : "done" as const,
+              cards: assistantCards.length > 0 ? [...assistantCards] : m.cards,
             }
           : m
       )
@@ -584,6 +593,30 @@ export function ChatPanel() {
                     onReject={() => handleRejectPlan(msg.id)}
                     status={msg.planStatus || "pending"}
                   />
+                )}
+
+                {/* 富卡片展示 */}
+                {msg.cards && msg.cards.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {msg.cards.map((card, i: number) => {
+                      if (card.type === "pr") {
+                        return <PRCard key={i} {...(card.data as any)} />;
+                      }
+                      if (card.type === "issue") {
+                        return <IssueCard key={i} {...(card.data as any)} />;
+                      }
+                      if (card.type === "repo") {
+                        return <RepoCard key={i} {...(card.data as any)} />;
+                      }
+                      if (card.type === "todo") {
+                        return <TodoItem key={i} {...(card.data as any)} />;
+                      }
+                      if (card.type === "action") {
+                        return <ActionCard key={i} {...(card.data as any)} onClick={() => handleSend((card.data as any).prompt)} />;
+                      }
+                      return null;
+                    })}
+                  </div>
                 )}
               </div>
               {msg.role === "user" && (

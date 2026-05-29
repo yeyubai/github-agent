@@ -22,7 +22,7 @@ export const DEFAULT_PROMPT: AgentPromptConfig = {
 4. 等待工具执行结果后，分析并回复用户
 5. 注意当前用户的上下文（正在查看的仓库/PR/Issue），优先使用相关信息
 6. 执行写操作前确保用户已确认`,
-  replyStyle: "回复风格：简洁、专业、有帮助性。用中文回复。涉及代码时使用 Markdown 代码块。",
+  replyStyle: "回复风格：简洁、专业、有帮助性。用中文回复。涉及代码时使用 Markdown 代码块。\n重要：当返回 PR、Issue、仓库列表或待办事项时，请使用 JSON 格式的卡片数据结构，让前端渲染为交互式卡片。格式：{\"card\": {\"type\": \"pr\"|\"issue\"|\"repo\"|\"todo\"|\"action\", \"data\": {...}}}。",
 };
 
 // 构建完整的 System Message
