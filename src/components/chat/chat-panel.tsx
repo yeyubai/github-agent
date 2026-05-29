@@ -8,7 +8,10 @@ import rehypeHighlight from "rehype-highlight";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { PlanViewer } from "./plan-viewer";
+import { QuickActions } from "./quick-actions";
 import type { AgentPromptConfig } from "@/lib/prompt-config";
+import type { MultiStepPlanType } from "@/lib/planner";
 
 const STORAGE_KEY = "github-agent-chat-history";
 const SESSION_KEY = "github-agent-session-id";
@@ -29,6 +32,8 @@ interface Message {
   reasoningDone?: boolean;
   toolCall?: ToolCall;
   commandStatus?: "pending" | "executing" | "done" | "cancelled";
+  plan?: MultiStepPlanType;
+  planStatus?: "pending" | "approved" | "rejected";
 }
 
 function cn(...inputs: (string | false | null | undefined)[]) {
@@ -161,6 +166,7 @@ export function ChatPanel() {
     let assistantContent = "";
     let assistantReasoning = "";
     let assistantToolCall: ToolCall | undefined;
+    let assistantPlan: MultiStepPlanType | undefined;
     let lastUpdate = 0;
     const THROTTLE_MS = 32;
 
@@ -194,6 +200,10 @@ export function ChatPanel() {
                 args: tc.args || {},
               };
             }
+            // 提取 multi-step plan
+            if (parsed.plan) {
+              assistantPlan = parsed.plan;
+            }
           } catch {
             assistantContent += data;
           }
@@ -212,6 +222,8 @@ export function ChatPanel() {
                   content: assistantContent,
                   reasoning: assistantReasoning,
                   toolCall: assistantToolCall,
+                  plan: assistantPlan,
+                  planStatus: assistantPlan ? "pending" as const : undefined,
                   commandStatus: assistantToolCall ? "pending" as const : "done" as const,
                 }
               : m
@@ -230,6 +242,8 @@ export function ChatPanel() {
               reasoning: assistantReasoning,
               reasoningDone: true,
               toolCall: assistantToolCall,
+              plan: assistantPlan,
+              planStatus: assistantPlan ? "pending" as const : undefined,
               commandStatus: assistantToolCall ? "pending" as const : "done" as const,
             }
           : m
@@ -380,6 +394,62 @@ export function ChatPanel() {
     );
   };
 
+  const handleApprovePlan = async (msgId: string) => {
+    const msg = messages.find((m) => m.id === msgId);
+    if (!msg?.plan) return;
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId ? { ...m, planStatus: "approved" as const } : m
+      )
+    );
+
+    setLoading(true);
+    try {
+      const promptConfig = getSavedPromptConfig();
+      const res = await fetch("/api/chat/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          plan: msg.plan,
+          promptConfig,
+        }),
+      });
+
+      if (!res.ok) throw new Error("请求失败");
+
+      const resultAssistantId = (Date.now() + 3).toString();
+      setMessages((prev) => [
+        ...prev,
+        { id: resultAssistantId, role: "assistant", content: "" },
+      ]);
+
+      // Reuse processStream to display the model's analysis
+      await processStream(res, resultAssistantId);
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId
+            ? { ...m, content: "计划执行失败，请重试。", planStatus: "rejected" as const }
+            : m
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectPlan = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId
+          ? { ...m, content: "已取消执行。", planStatus: "rejected" as const }
+          : m
+      )
+    );
+  };
+
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({
@@ -408,6 +478,8 @@ export function ChatPanel() {
           </Button>
         )}
       </div>
+
+      <QuickActions onAction={(prompt) => handleSend(prompt)} disabled={loading} />
 
       <div className="flex-1 overflow-hidden relative">
         <div
@@ -502,6 +574,16 @@ export function ChatPanel() {
                   <code className="mt-2 block bg-background/50 px-2 py-1.5 rounded text-xs font-mono text-muted-foreground line-through opacity-60">
                     {msg.toolCall.name}
                   </code>
+                )}
+
+                {/* 多步计划展示 */}
+                {msg.plan && (
+                  <PlanViewer
+                    plan={msg.plan}
+                    onApprove={() => handleApprovePlan(msg.id)}
+                    onReject={() => handleRejectPlan(msg.id)}
+                    status={msg.planStatus || "pending"}
+                  />
                 )}
               </div>
               {msg.role === "user" && (

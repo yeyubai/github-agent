@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { HumanMessage } from "@langchain/core/messages";
 import { getOrCreateSessionState, appendSessionMessage, updateSessionConfig } from "@/lib/message-history";
 import { streamModelResponse } from "@/lib/chat-stream";
+import { parseIntent } from "@/lib/planner";
 import type { AgentPromptConfig } from "@/lib/prompt-config";
 
 export async function POST(request: NextRequest) {
@@ -19,6 +20,29 @@ export async function POST(request: NextRequest) {
 
     if (promptConfig) {
       await updateSessionConfig(sessionId, promptConfig);
+    }
+
+    // Check if this is a complex request that needs multi-step planning
+    const plan = await parseIntent(message);
+    if (plan) {
+      // Send the plan to the frontend for approval
+      const stream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ plan })}\n\n`)
+          );
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     const encoder = new TextEncoder();
