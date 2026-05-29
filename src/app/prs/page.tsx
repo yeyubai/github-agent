@@ -28,8 +28,6 @@ interface PR {
   createdAt: string;
   url: string;
   labels: { name: string }[];
-  baseRefName?: string;
-  headRefName?: string;
 }
 
 export default function PRsPage() {
@@ -179,12 +177,6 @@ export default function PRsPage() {
                         <Clock className="h-3 w-3" />
                         {formatTime(pr.createdAt)}
                       </span>
-                      {pr.baseRefName && (
-                        <span className="flex items-center gap-1">
-                          <GitMerge className="h-3 w-3" />
-                          {pr.headRefName} → {pr.baseRefName}
-                        </span>
-                      )}
                       {pr.labels?.length > 0 && (
                         <div className="flex gap-1">
                           {pr.labels.slice(0, 3).map((l) => (

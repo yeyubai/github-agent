@@ -5,7 +5,7 @@ import { runGhRaw, listRepos, listPRs, listIssues, searchRepos, searchCode } fro
 
 export const listReposTool = tool(
   async ({ limit }) => {
-    const result = await listRepos(undefined, limit);
+    const result = await listRepos(null, undefined, limit);
     return JSON.stringify(result, null, 2);
   },
   {
@@ -19,7 +19,7 @@ export const listReposTool = tool(
 
 export const searchReposTool = tool(
   async ({ query, language, stars, sort, order, limit }) => {
-    const result = await searchRepos({
+    const result = await searchRepos(null, {
       query, language, stars, sort: sort as any, order: order as any, limit,
     });
     return JSON.stringify(result, null, 2);
@@ -40,7 +40,7 @@ export const searchReposTool = tool(
 
 export const listPRsTool = tool(
   async ({ repo, state, limit }) => {
-    const result = await listPRs(repo || undefined, state, limit);
+    const result = await listPRs(null, repo || undefined, state, limit);
     return JSON.stringify(result, null, 2);
   },
   {
@@ -56,7 +56,7 @@ export const listPRsTool = tool(
 
 export const listIssuesTool = tool(
   async ({ repo, state, limit }) => {
-    const result = await listIssues(repo || undefined, state, limit);
+    const result = await listIssues(null, repo || undefined, state, limit);
     return JSON.stringify(result, null, 2);
   },
   {
@@ -116,7 +116,7 @@ export const viewIssueTool = tool(
 
 export const searchCodeTool = tool(
   async ({ query, repo }) => {
-    const result = await searchCode(query, repo || undefined);
+    const result = await searchCode(null, query, repo || undefined);
     return JSON.stringify(result, null, 2);
   },
   {

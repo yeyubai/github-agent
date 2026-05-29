@@ -22,7 +22,6 @@ interface Issue {
   number: number;
   title: string;
   state: string;
-  stateReason?: string;
   author: { login: string };
   createdAt: string;
   url: string;

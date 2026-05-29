@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { buttonVariants } from "@/components/ui/button";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,15 +35,12 @@ export function LanguageSelect({ value, onChange, disabled }: LanguageSelectProp
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger>
-        <Button
-          variant="outline"
-          className="h-9 gap-1 min-w-[120px]"
-          disabled={disabled}
-        >
-          <span className="truncate">{selected.label}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
-        </Button>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        className={cn(buttonVariants({ variant: "outline", size: "default" }), "h-9 gap-1 min-w-[120px]")}
+      >
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {LANGUAGES.map((lang) => (

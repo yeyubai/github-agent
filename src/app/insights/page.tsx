@@ -17,9 +17,11 @@ import {
   Languages,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Repo {
   name: string;
+  fullName: string;
   url: string;
   description: string | null;
   isPrivate: boolean;
@@ -201,11 +203,9 @@ export default function InsightsPage() {
               ) : (
                 <div className="space-y-2">
                   {topStarred.map((repo, i) => (
-                    <a
+                    <Link
                       key={repo.name}
-                      href={repo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={`/repos/${repo.fullName}`}
                       className="flex items-center justify-between py-1.5 text-sm hover:bg-accent/50 px-2 rounded transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
@@ -218,7 +218,7 @@ export default function InsightsPage() {
                         <Star className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs">{repo.stargazerCount}</span>
                       </div>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -240,11 +240,9 @@ export default function InsightsPage() {
             ) : (
               <div className="space-y-2">
                 {recentlyUpdated.map((repo) => (
-                  <a
+                  <Link
                     key={repo.name}
-                    href={repo.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={`/repos/${repo.fullName}`}
                     className="flex items-center justify-between py-1.5 text-sm hover:bg-accent/50 px-2 rounded transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -258,7 +256,7 @@ export default function InsightsPage() {
                     <span className="text-xs text-muted-foreground shrink-0 ml-2">
                       {formatTime(repo.updatedAt)}
                     </span>
-                  </a>
+                  </Link>
                 ))}
               </div>
             )}

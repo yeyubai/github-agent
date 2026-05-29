@@ -19,9 +19,11 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Repo {
   name: string;
+  fullName: string;
   url: string;
   description: string | null;
   isPrivate: boolean;
@@ -230,11 +232,9 @@ export default function ReposPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((repo) => (
-              <a
+              <Link
                 key={repo.name}
-                href={repo.url}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/repos/${repo.fullName}`}
                 className="block p-4 border rounded-lg hover:bg-accent/50 transition-colors"
               >
                 <div className="flex items-start gap-3">
@@ -276,7 +276,7 @@ export default function ReposPage() {
                     </div>
                   </div>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         )}

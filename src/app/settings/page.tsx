@@ -8,17 +8,19 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import {
   Key,
-  Terminal,
   Bot,
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Copy,
-  Trash2,
   RotateCcw,
+  Terminal,
+  Eye,
+  EyeOff,
+  Globe,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DEFAULT_PROMPT, buildSystemPrompt } from "@/lib/prompt-config";
+import { useGitHubToken } from "@/hooks/use-github-token";
 
 const PROMPT_KEY = "github-agent-prompt";
 
@@ -68,6 +70,86 @@ export default function SettingsPage() {
   };
 
   const previewPrompt = buildSystemPrompt({ role, toolDescription: toolDesc, workflow, replyStyle });
+
+  // ==================== GitHub Token 配置 ====================
+  const { token: savedToken, setToken: setSavedToken, removeToken, isLoaded } = useGitHubToken();
+  const [tokenInput, setTokenInput] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [savingToken, setSavingToken] = useState(false);
+  const [verifyingToken, setVerifyingToken] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState<"saved" | "verified" | "error" | null>(null);
+
+  // 加载时回显 token（只显示前8位）
+  useEffect(() => {
+    if (savedToken) {
+      setTokenInput(savedToken.slice(0, 8) + "..." + savedToken.slice(-4));
+    }
+  }, [savedToken]);
+
+  const handleSaveToken = async () => {
+    const rawToken = tokenInput.includes("...") ? savedToken : tokenInput;
+    if (!rawToken?.trim() || rawToken.includes("...")) return;
+
+    setSavingToken(true);
+    setTokenStatus(null);
+
+    try {
+      const res = await fetch("/api/github/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: rawToken.trim() }),
+      });
+
+      if (res.ok) {
+        setSavedToken(rawToken.trim());
+        setTokenInput(rawToken.trim().slice(0, 8) + "..." + rawToken.trim().slice(-4));
+        setTokenStatus("saved");
+      } else {
+        const data = await res.json();
+        setTokenStatus("error");
+      }
+    } catch {
+      setTokenStatus("error");
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
+  const handleVerifyToken = async () => {
+    const rawToken = tokenInput.includes("...") ? savedToken : tokenInput;
+    if (!rawToken?.trim()) return;
+
+    setVerifyingToken(true);
+    setTokenStatus(null);
+
+    try {
+      // 先保存 token
+      await fetch("/api/github/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: rawToken.trim() }),
+      });
+
+      // 验证：调用一个轻量级 API
+      const res = await fetch("/api/github/repos?limit=1");
+      if (res.ok) {
+        setTokenStatus("verified");
+      } else {
+        setTokenStatus("error");
+      }
+    } catch {
+      setTokenStatus("error");
+    } finally {
+      setVerifyingToken(false);
+    }
+  };
+
+  const handleRemoveToken = async () => {
+    await fetch("/api/github/token", { method: "DELETE" });
+    removeToken();
+    setTokenInput("");
+    setTokenStatus(null);
+  };
 
   const handleTestKey = async () => {
     setTesting(true);
@@ -207,22 +289,87 @@ export default function SettingsPage() {
 
         <Separator />
 
-        {/* GitHub 配置 */}
+        {/* GitHub Token 配置 */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Terminal className="h-4 w-4" />
-              GitHub CLI 状态
+              GitHub Token 配置
             </CardTitle>
-            <CardDescription>gh CLI 用于执行所有 GitHub 操作</CardDescription>
+            <CardDescription>粘贴 Personal Access Token 以访问 GitHub API（推荐）</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium">安装/登录 gh CLI：</p>
-              <code className="block bg-background px-2 py-1 rounded font-mono mt-1">
-                gh auth login
-              </code>
-              <p className="mt-2">按提示选择 GitHub.com → HTTPS → 浏览器登录</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={showToken ? "text" : "password"}
+                  value={tokenInput}
+                  onChange={(e) => {
+                    setTokenInput(e.target.value);
+                    setTokenStatus(null);
+                  }}
+                  placeholder="ghp_xxxxxxxxxxxx..."
+                  disabled={savingToken || verifyingToken}
+                />
+                {tokenInput && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowToken(!showToken)}
+                  >
+                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                )}
+              </div>
+              <Button onClick={handleSaveToken} disabled={savingToken || !tokenInput.trim()}>
+                {savingToken ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                保存
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleVerifyToken}
+                disabled={verifyingToken || !tokenInput.trim()}
+              >
+                {verifyingToken ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Globe className="h-4 w-4 mr-1" />}
+                验证
+              </Button>
+              {savedToken && (
+                <Button variant="destructive" onClick={handleRemoveToken} size="icon">
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            {tokenStatus === "saved" && (
+              <Badge className="bg-green-500">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Token 已保存
+              </Badge>
+            )}
+            {tokenStatus === "verified" && (
+              <Badge className="bg-green-500">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Token 验证通过
+              </Badge>
+            )}
+            {tokenStatus === "error" && (
+              <Badge variant="destructive">
+                Token 验证失败，请检查是否有效
+              </Badge>
+            )}
+
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
+              <p className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-3 w-3" />
+                如何获取 Token
+              </p>
+              <ol className="list-decimal list-inside space-y-1 pl-1">
+                <li>访问 <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="underline">GitHub Settings → Personal access tokens</a></li>
+                <li>点击 <strong>Generate new token (fine-grained)</strong></li>
+                <li>选择需要访问的仓库（或所有仓库）</li>
+                <li>勾选权限：<code className="bg-background px-1 rounded">Contents</code>、<code className="bg-background px-1 rounded">Pull requests</code>、<code className="bg-background px-1 rounded">Issues</code>、<code className="bg-background px-1 rounded">Metadata</code></li>
+                <li>生成后复制 token 并粘贴到上方输入框</li>
+              </ol>
             </div>
           </CardContent>
         </Card>
@@ -250,7 +397,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <span className="text-muted-foreground">GitHub 集成</span>
-                <p className="font-medium">GitHub CLI</p>
+                <p className="font-medium">REST API (Token)</p>
               </div>
             </div>
           </CardContent>

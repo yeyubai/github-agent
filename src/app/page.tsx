@@ -39,7 +39,10 @@ export default function Home() {
   const [language, setLanguage] = useState("");
   const [results, setResults] = useState<RepoResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [hasMore, setHasMore] = useState(true);
+  const pageLimit = 20;
 
   useEffect(() => {
     Promise.all([
@@ -64,9 +67,11 @@ export default function Home() {
     setSearching(true);
     setSearchError("");
     setResults([]);
+    setHasMore(true);
 
     const params = new URLSearchParams({ q: searchInput.trim() });
     if (language) params.set("lang", language);
+    params.set("limit", String(pageLimit));
 
     try {
       const res = await fetch(`/api/github/repos/search?${params}`);
@@ -76,12 +81,37 @@ export default function Home() {
         setSearchError(data.error);
       } else {
         setResults(data);
+        setHasMore(data.length >= pageLimit);
         setQuery(searchInput.trim());
       }
     } catch {
       setSearchError("搜索失败，请检查 gh CLI 状态");
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    const skip = results.length;
+    const params = new URLSearchParams({ q: query });
+    if (language) params.set("lang", language);
+    params.set("limit", String(pageLimit));
+    params.set("offset", String(skip));
+
+    try {
+      const res = await fetch(`/api/github/repos/search?${params}`);
+      const data = await res.json();
+      if (data.error) {
+        setSearchError(data.error);
+      } else {
+        setResults(prev => [...prev, ...data]);
+        setHasMore(data.length >= pageLimit);
+      }
+    } catch {
+      setSearchError("加载更多失败");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -216,6 +246,14 @@ export default function Home() {
                     </div>
                   </a>
                 ))}
+                {hasMore && (
+                  <div className="flex justify-center pt-2">
+                    <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
+                      {loadingMore ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      加载更多 ({results.length} 已加载)
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
