@@ -4,6 +4,7 @@ import { z } from "zod";
 import { runGhRaw, listRepos, listPRs, listIssues, searchRepos, searchCode } from "../github";
 import { allWriteTools } from "./write-tools";
 import { allAggregationTools } from "./aggregation-tools";
+import { allReportTools } from "./report-tools";
 
 export const listReposTool = tool(
   async ({ limit }) => {
@@ -203,4 +204,5 @@ export const allTools = [
   runGhTool,
   ...allWriteTools,
   ...allAggregationTools,
+  ...allReportTools,
 ];
