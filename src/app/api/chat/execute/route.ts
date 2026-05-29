@@ -1,7 +1,7 @@
 // src/app/api/chat/execute/route.ts
 // Batch tool execution for multi-step plans
 import { NextRequest } from "next/server";
-import { ToolMessage, HumanMessage } from "@langchain/core/messages";
+import { ToolMessage } from "@langchain/core/messages";
 import { model } from "@/lib/langchain-model";
 import { getOrCreateSessionState, appendSessionMessage, updateSessionConfig } from "@/lib/message-history";
 import { allTools } from "@/lib/tools/github-tools";
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const executeTool = async (toolName: string, args: Record<string, unknown>): Promise<string> => {
       const tool = allTools.find((t) => t.name === toolName);
       if (!tool) throw new Error(`未找到工具: ${toolName}`);
-      const result = await (tool as any).invoke(args);
+      const result = await (tool as unknown as { invoke: (args: Record<string, unknown>) => Promise<string> }).invoke(args);
       return result;
     };
 
@@ -67,15 +67,15 @@ export async function POST(request: NextRequest) {
           );
 
           // Then stream the model's analysis
-          const streamResult = await model.bindTools(allTools).stream(state.messages as any);
+          const streamResult = await model.bindTools(allTools).stream(state.messages);
 
           for await (const chunk of streamResult) {
             if (typeof chunk.content === "string" && chunk.content) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk.content })}\n\n`));
             }
-            const reasoning = (chunk as any).additional_kwargs?.reasoning_content;
-            if (reasoning) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reasoning })}\n\n`));
+            const reasoning = (chunk as unknown as Record<string, unknown>).additional_kwargs as Record<string, unknown> | undefined;
+            if (reasoning?.reasoning_content) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reasoning: reasoning.reasoning_content })}\n\n`));
             }
           }
 
