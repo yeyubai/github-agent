@@ -22,8 +22,15 @@ const SCROLL_THRESHOLD = 80;
 interface ToolCall {
   id: string;
   name: string;
-  args: Record<string, any>;
+  args: Record<string, unknown>;
 }
+
+interface PRCardData { type: "pr"; data: { repo: string; number: number; title: string; state?: string; author?: string; url?: string; labels?: { name: string }[] } }
+interface IssueCardData { type: "issue"; data: { repo: string; number: number; title: string; state?: string; labels?: { name: string }[]; url?: string } }
+interface RepoCardData { type: "repo"; data: { fullName: string; description?: string; stargazerCount?: number; primaryLanguage?: { name: string } | null; url?: string } }
+interface TodoCardData { type: "todo"; data: { type: "issue" | "review"; repo: string; number: number; title: string; labels?: string[]; author?: string; url?: string } }
+interface ActionCardData { type: "action"; data: { label: string; description: string; prompt: string } }
+type CardDataType = PRCardData | IssueCardData | RepoCardData | TodoCardData | ActionCardData;
 
 interface Message {
   id: string;
@@ -35,7 +42,7 @@ interface Message {
   commandStatus?: "pending" | "executing" | "done" | "cancelled";
   plan?: MultiStepPlanType;
   planStatus?: "pending" | "approved" | "rejected";
-  cards?: { type: string; data: Record<string, unknown> }[];
+  cards?: CardDataType[];
 }
 
 function cn(...inputs: (string | false | null | undefined)[]) {
@@ -180,7 +187,7 @@ export function ChatPanel() {
     let assistantReasoning = "";
     let assistantToolCall: ToolCall | undefined;
     let assistantPlan: MultiStepPlanType | undefined;
-    let assistantCards: { type: string; data: Record<string, unknown> }[] = [];
+    let assistantCards: CardDataType[] = [];
     let lastUpdate = 0;
     const THROTTLE_MS = 32;
 
@@ -220,7 +227,7 @@ export function ChatPanel() {
             }
             // 提取富卡片数据
             if (parsed.card) {
-              assistantCards = [...assistantCards, parsed.card];
+              assistantCards = [...assistantCards, parsed.card as CardDataType];
             }
           } catch {
             assistantContent += data;
@@ -609,21 +616,21 @@ export function ChatPanel() {
                 {/* 富卡片展示 */}
                 {msg.cards && msg.cards.length > 0 && (
                   <div className="mt-2 space-y-2">
-                    {msg.cards.map((card, i: number) => {
+                    {msg.cards.map((card, i) => {
                       if (card.type === "pr") {
-                        return <PRCard key={i} {...(card.data as any)} />;
+                        return <PRCard key={i} {...card.data} />;
                       }
                       if (card.type === "issue") {
-                        return <IssueCard key={i} {...(card.data as any)} />;
+                        return <IssueCard key={i} {...card.data} />;
                       }
                       if (card.type === "repo") {
-                        return <RepoCard key={i} {...(card.data as any)} />;
+                        return <RepoCard key={i} {...card.data} />;
                       }
                       if (card.type === "todo") {
-                        return <TodoItem key={i} {...(card.data as any)} />;
+                        return <TodoItem key={i} {...card.data} />;
                       }
                       if (card.type === "action") {
-                        return <ActionCard key={i} {...(card.data as any)} onClick={() => handleSend((card.data as any).prompt)} />;
+                        return <ActionCard key={i} {...card.data} onClick={() => handleSend(card.data.prompt)} />;
                       }
                       return null;
                     })}
