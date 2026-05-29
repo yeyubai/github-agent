@@ -3,6 +3,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { getOrCreateSessionState, appendSessionMessage, updateSessionConfig } from "@/lib/message-history";
 import { streamModelResponse } from "@/lib/chat-stream";
 import { parseIntent } from "@/lib/planner";
+import { getContextHint } from "@/lib/context-store";
 import type { AgentPromptConfig } from "@/lib/prompt-config";
 
 export async function POST(request: NextRequest) {
@@ -16,7 +17,13 @@ export async function POST(request: NextRequest) {
 
     const state = await getOrCreateSessionState(sessionId, promptConfig);
     const userMessage = new HumanMessage(message);
-    await appendSessionMessage(sessionId, userMessage);
+    const contextHint = await getContextHint();
+    if (contextHint) {
+      const enhancedMessage = new HumanMessage(message + contextHint);
+      await appendSessionMessage(sessionId, enhancedMessage);
+    } else {
+      await appendSessionMessage(sessionId, userMessage);
+    }
 
     if (promptConfig) {
       await updateSessionConfig(sessionId, promptConfig);
