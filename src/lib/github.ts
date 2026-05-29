@@ -571,3 +571,216 @@ export async function mergePR(token: string | null, repo: string, prNumber: numb
 export async function closePR(token: string | null, repo: string, prNumber: number): Promise<{ url: string }> {
   return updateIssue(token, repo, prNumber, "closed");
 }
+
+// ==================== Cross-Repo Aggregation ====================
+
+/** Get all open PRs across all user's repos */
+export async function getAllOpenPRs(token: string | null): Promise<{
+  repo: string;
+  number: number;
+  title: string;
+  state: string;
+  author: { login: string };
+  createdAt: string;
+  url: string;
+  labels: { name: string }[];
+}[]> {
+  if (!hasToken(token)) {
+    // Fallback: use gh CLI to list all repos, then query each
+    const reposRaw = await ghCommand("repo list --limit 100 --json nameWithOwner");
+    const repos = JSON.parse(reposRaw) as { nameWithOwner: string }[];
+
+    const allPRs: any[] = [];
+    for (const repo of repos.slice(0, 20)) {  // Limit to 20 repos for performance
+      try {
+        const prs = await listPRs(token, repo.nameWithOwner, "open", 10);
+        allPRs.push(...prs.map((p: any) => ({ ...p, repo: repo.nameWithOwner })));
+      } catch {
+        // Skip repos we can't access
+      }
+    }
+    return allPRs;
+  }
+
+  // REST API: search for all open PRs by the user
+  const raw = await githubFetch(
+    `/search/issues?q=author:@me+type:pr+state:open&per_page=100`,
+    token
+  ) as { items: {
+    repository_url: string;
+    number: number;
+    title: string;
+    state: string;
+    user: { login: string };
+    created_at: string;
+    html_url: string;
+    labels: { name: string }[];
+  }[] };
+
+  return raw.items.map(r => ({
+    repo: r.repository_url.split("/").slice(-2).join("/"),
+    number: r.number,
+    title: r.title,
+    state: r.state,
+    author: { login: r.user.login },
+    createdAt: r.created_at,
+    url: r.html_url,
+    labels: r.labels || [],
+  }));
+}
+
+/** Get all open Issues assigned to the user across all repos */
+export async function getAssignedIssues(token: string | null): Promise<{
+  repo: string;
+  number: number;
+  title: string;
+  state: string;
+  createdAt: string;
+  url: string;
+  labels: { name: string; color: string }[];
+}[]> {
+  if (!hasToken(token)) throw new Error("GitHub token required");
+
+  const raw = await githubFetch(
+    `/search/issues?q=assignee:@me+type:issue+state:open&per_page=100`,
+    token
+  ) as { items: {
+    repository_url: string;
+    number: number;
+    title: string;
+    state: string;
+    created_at: string;
+    html_url: string;
+    labels: { name: string; color: string }[];
+  }[] };
+
+  return raw.items.map(r => ({
+    repo: r.repository_url.split("/").slice(-2).join("/"),
+    number: r.number,
+    title: r.title,
+    state: r.state,
+    createdAt: r.created_at,
+    url: r.html_url,
+    labels: r.labels || [],
+  }));
+}
+
+/** Get PRs that need the user's review */
+export async function getReviewRequests(token: string | null): Promise<{
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  createdAt: string;
+  url: string;
+}[]> {
+  if (!hasToken(token)) throw new Error("GitHub token required");
+
+  const raw = await githubFetch(
+    `/search/issues?q=review-requested:@me+type:pr+state:open&per_page=50`,
+    token
+  ) as { items: {
+    repository_url: string;
+    number: number;
+    title: string;
+    user: { login: string };
+    created_at: string;
+    html_url: string;
+  }[] };
+
+  return raw.items.map(r => ({
+    repo: r.repository_url.split("/").slice(-2).join("/"),
+    number: r.number,
+    title: r.title,
+    author: r.user.login,
+    createdAt: r.created_at,
+    url: r.html_url,
+  }));
+}
+
+/** Get user's activity in a date range (commits, PRs, Issues) */
+export async function getUserActivity(token: string | null, since: string, until: string): Promise<{
+  commits: { repo: string; message: string; date: string; sha: string }[];
+  prs: { repo: string; number: number; title: string; state: string; url: string }[];
+  issues: { repo: string; number: number; title: string; state: string; url: string }[];
+}> {
+  if (!hasToken(token)) throw new Error("GitHub token required");
+
+  // Get commits: search for user's commits in date range
+  const reposRaw = await githubFetch(`/user/repos?per_page=100&type=owner`, token) as { full_name: string }[];
+  const repoNames = reposRaw.map(r => r.full_name);
+  const userLogin = await getGitHubLogin(token);
+
+  const commits: { repo: string; message: string; date: string; sha: string }[] = [];
+
+  // Query commits from each repo (limit to top 10 by activity)
+  for (const repo of repoNames.slice(0, 10)) {
+    try {
+      const raw = await githubFetch(
+        `/repos/${repo}/commits?since=${since}&until=${until}&per_page=30`,
+        token
+      ) as { sha: string; commit: { message: string; author: { date: string } }; author: { login: string } | null }[];
+
+      commits.push(
+        ...raw
+          .filter(c => c.author?.login === userLogin)
+          .map(c => ({
+            repo,
+            message: c.commit.message.split("\n")[0],  // First line only
+            date: c.commit.author.date,
+            sha: c.sha,
+          }))
+      );
+    } catch {
+      // Skip repos we can't access
+    }
+  }
+
+  // Get PRs created in date range
+  const prsRaw = await githubFetch(
+    `/search/issues?q=author:@me+type:pr+created:${since}..${until}&per_page=50`,
+    token
+  ) as { items: {
+    repository_url: string;
+    number: number;
+    title: string;
+    state: string;
+    html_url: string;
+  }[] };
+
+  const prs = prsRaw.items.map(r => ({
+    repo: r.repository_url.split("/").slice(-2).join("/"),
+    number: r.number,
+    title: r.title,
+    state: r.state,
+    url: r.html_url,
+  }));
+
+  // Get Issues created in date range
+  const issuesRaw = await githubFetch(
+    `/search/issues?q=author:@me+type:issue+created:${since}..${until}&per_page=50`,
+    token
+  ) as { items: {
+    repository_url: string;
+    number: number;
+    title: string;
+    state: string;
+    html_url: string;
+  }[] };
+
+  const issues = issuesRaw.items.map(r => ({
+    repo: r.repository_url.split("/").slice(-2).join("/"),
+    number: r.number,
+    title: r.title,
+    state: r.state,
+    url: r.html_url,
+  }));
+
+  return { commits, prs, issues };
+}
+
+/** Helper: get current GitHub login */
+async function getGitHubLogin(token: string): Promise<string> {
+  const raw = await githubFetch("/user", token) as { login: string };
+  return raw.login;
+}

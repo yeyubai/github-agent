@@ -243,3 +243,37 @@ export async function getRecentActivity(userId: string, limit = 20): Promise<{ a
   if (error) throw new Error(`Failed to load activity: ${error.message}`);
   return (data || []) as { action: string; details: Record<string, unknown>; created_at: string }[];
 }
+
+// ===== Reports operations =====
+
+export async function saveReport(userId: string, type: string, content: string, title?: string, metadata?: Record<string, unknown>): Promise<string> {
+  const { data, error } = await getSupabaseServer()
+    .from("reports")
+    .insert({
+      user_id: userId,
+      type,
+      content,
+      title: title ?? null,
+      metadata: metadata ?? {},
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw new Error(`Failed to save report: ${error?.message}`);
+  return data.id;
+}
+
+export async function getReports(userId: string, type?: string, limit = 10): Promise<{ id: string; type: string; title: string | null; content: string; metadata: Record<string, unknown>; created_at: string }[]> {
+  let query = getSupabaseServer()
+    .from("reports")
+    .select("id, type, title, content, metadata, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (type) query = query.eq("type", type);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Failed to load reports: ${error.message}`);
+  return (data || []) as { id: string; type: string; title: string | null; content: string; metadata: Record<string, unknown>; created_at: string }[];
+}
